@@ -197,7 +197,7 @@ export default function Home() {
                   justifyContent: "space-between",
                 }}
               >
-                <span>Public</span>
+                <span>White List</span>
                 <b>{cost}</b>
               </div>
               <div
@@ -207,7 +207,7 @@ export default function Home() {
                   marginBottom: "16px",
                 }}
               >
-                <span style={{ fontSize: "11px" }}>Live</span>
+                <span style={{ fontSize: "11px" }}>Live 2nd Oct 7pm UTC</span>
                 {/* <span style={{ fontSize: "11px" }}>512/1024</span> */}
               </div>
               <button disabled={!publicKey || isLoading} onClick={handleMintV2}>

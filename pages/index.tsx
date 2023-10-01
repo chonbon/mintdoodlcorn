@@ -135,7 +135,7 @@ export default function Home() {
     ? candyMachine.candyGuard?.guards.solPayment
       ? Number(candyMachine.candyGuard?.guards.solPayment?.amount.basisPoints) /
           1e9 +
-        " SOL"
+        "1 SOL"
       : "Stoned Sloths Mint"
     : "..."
 

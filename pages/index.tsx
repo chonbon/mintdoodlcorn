@@ -136,13 +136,13 @@ export default function Home() {
       ? Number(candyMachine.candyGuard?.guards.solPayment?.amount.basisPoints) /
           1e9 +
         " SOL"
-      : "Free mint"
+      : "Stoned Sloth mint"
     : "..."
 
   return (
     <>
       <Head>
-        <title>Numbers Collection Mint</title>
+        <title>Stoned Sloths V2 Mint</title>
         <meta name="description" content="Get your unique NFT now!" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />

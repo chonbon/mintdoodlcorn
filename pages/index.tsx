@@ -138,7 +138,7 @@ export default function Home() {
         ) /
           1 + // Divide by 10 instead of 1e1
         " GEMS"
-      : "Stoned Sloths Mint"
+      : "GEMS Mint"
     : "..."
 
   return (

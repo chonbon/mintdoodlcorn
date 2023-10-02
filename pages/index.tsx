@@ -136,8 +136,8 @@ export default function Home() {
       ? Number(
           candyMachine.candyGuard?.guards.tokenPayment?.amount.basisPoints
         ) /
-          1e9 +
-        "1 SOL"
+          1 + // Divide by 10 instead of 1e1
+        " GEMS"
       : "Stoned Sloths Mint"
     : "..."
 
@@ -203,7 +203,7 @@ export default function Home() {
                   justifyContent: "space-between",
                 }}
               >
-                <span>Spend GEMS</span>
+                <span>GEMS</span>
                 <b>{cost}</b>
               </div>
               <div
@@ -212,10 +212,7 @@ export default function Home() {
                   justifyContent: "space-between",
                   marginBottom: "16px",
                 }}
-              >
-                <span style={{ fontSize: "11px" }}>Live 2nd Oct 7pm UTC</span>
-                {/* <span style={{ fontSize: "11px" }}>512/1024</span> */}
-              </div>
+              ></div>
               <button disabled={!publicKey || isLoading} onClick={handleMintV2}>
                 {isLoading ? "Minting your NFT..." : "Mint"}
               </button>

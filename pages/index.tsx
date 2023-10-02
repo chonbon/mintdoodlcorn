@@ -132,8 +132,10 @@ export default function Home() {
   }
 
   const cost = candyMachine
-    ? candyMachine.candyGuard?.guards.solPayment
-      ? Number(candyMachine.candyGuard?.guards.solPayment?.amount.basisPoints) /
+    ? candyMachine.candyGuard?.guards.tokenPayment
+      ? Number(
+          candyMachine.candyGuard?.guards.tokenPayment?.amount.basisPoints
+        ) /
           1e9 +
         "1 SOL"
       : "Stoned Sloths Mint"
@@ -142,7 +144,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Stoned Sloths V2 Mint</title>
+        <title>Doodlcorns</title>
         <meta name="description" content="Get your unique NFT now!" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
@@ -158,13 +160,17 @@ export default function Home() {
         <div
           style={{
             display: "flex",
+            flexDirection: "column",
             gap: "32px",
-            alignItems: "flex-start",
+            alignItems: "center", // Center horizontally
+            backgroundColor: "black", // Black background
+            padding: "16px", // Optional: Add padding to the div
           }}
         >
           <img
             style={{ maxWidth: "396px", borderRadius: "8px" }}
-            src={collection?.json?.image}
+            src="/ssLogo.png"
+            alt="Sloth Logo"
           />
           <div
             style={{
@@ -197,7 +203,7 @@ export default function Home() {
                   justifyContent: "space-between",
                 }}
               >
-                <span>White List</span>
+                <span>Spend GEMS</span>
                 <b>{cost}</b>
               </div>
               <div

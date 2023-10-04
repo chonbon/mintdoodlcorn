@@ -32,6 +32,7 @@ import {
   TokenPayment,
 } from "@metaplex-foundation/mpl-candy-machine"
 import { walletAdapterIdentity } from "@metaplex-foundation/umi-signer-wallet-adapters"
+import { encode } from "bs58"
 
 export default function Home() {
   const wallet = useWallet()
@@ -113,6 +114,8 @@ export default function Home() {
         },
       })
 
+      console.log("tx sent ", encode(signature))
+
       const digitalAsset = await fetchDigitalAsset(umi, nftSigner.publicKey)
 
       if (digitalAsset) {
@@ -122,7 +125,8 @@ export default function Home() {
 
       setFormMessage("Mint failed!")
     } catch (err: any) {
-      setFormMessage(err)
+      console.log(err)
+      setFormMessage("Mint failed!")
     }
     setIsLoading(false)
   }

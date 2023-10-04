@@ -2,144 +2,172 @@ import Head from "next/head"
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui"
 import { useConnection, useWallet } from "@solana/wallet-adapter-react"
 import { useEffect, useState } from "react"
-import {
-  CandyMachine,
-  Metaplex,
-  Nft,
-  NftWithToken,
-  PublicKey,
-  Sft,
-  SftWithToken,
-  walletAdapterIdentity,
-} from "@metaplex-foundation/js"
-import { Keypair, Transaction } from "@solana/web3.js"
 
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults"
 import {
-  getRemainingAccountsForCandyGuard,
-  mintV2Instruction,
-} from "@/utils/mintV2"
-import { fromTxError } from "@/utils/errors"
+  publicKey,
+  Option,
+  unwrapOption,
+  generateSigner,
+  transactionBuilder,
+  some,
+} from "@metaplex-foundation/umi"
+import {
+  fetchDigitalAsset,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata"
+import {
+  setComputeUnitLimit,
+  fetchAddressLookupTable,
+} from "@metaplex-foundation/mpl-toolbox"
+import {
+  mplCandyMachine,
+  fetchCandyMachine,
+  CandyMachine,
+  safeFetchCandyGuard,
+  CandyGuard,
+  DefaultGuardSet,
+  mintV2,
+  TokenPaymentMintArgs,
+  TokenPayment,
+} from "@metaplex-foundation/mpl-candy-machine"
+import { walletAdapterIdentity } from "@metaplex-foundation/umi-signer-wallet-adapters"
 
 export default function Home() {
   const wallet = useWallet()
-  const { publicKey } = wallet
   const { connection } = useConnection()
-  const [metaplex, setMetaplex] = useState<Metaplex | null>(null)
-  const [candyMachine, setCandyMachine] = useState<CandyMachine | null>(null)
-  const [collection, setCollection] = useState<
-    Sft | SftWithToken | Nft | NftWithToken | null
-  >(null)
   const [formMessage, setFormMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
 
-  useEffect(() => {
-    ;(async () => {
-      if (wallet && connection && !collection && !candyMachine) {
-        if (!process.env.NEXT_PUBLIC_CANDY_MACHINE_ID) {
-          throw new Error("Please provide a candy machine id")
-        }
-        const metaplex = new Metaplex(connection).use(
-          walletAdapterIdentity(wallet)
-        )
-        setMetaplex(metaplex)
+  const [candyMachine, setCandyMachine] = useState<CandyMachine>()
+  const [candyGuard, setCandyGuard] = useState<CandyGuard<DefaultGuardSet>>()
+  const [cost, setCost] = useState("GEMS MINT")
 
-        const candyMachine = await metaplex.candyMachines().findByAddress({
-          address: new PublicKey(process.env.NEXT_PUBLIC_CANDY_MACHINE_ID),
-        })
-
-        setCandyMachine(candyMachine)
-
-        const collection = await metaplex
-          .nfts()
-          .findByMint({ mintAddress: candyMachine.collectionMintAddress })
-
-        setCollection(collection)
-
-        console.log(collection)
-      }
-    })()
-  }, [wallet, connection])
+  const umi = createUmi(connection.rpcEndpoint)
+    .use(walletAdapterIdentity(wallet))
+    .use(mplTokenMetadata())
+    .use(mplCandyMachine())
 
   /** Mints NFTs through a Candy Machine using Candy Guards */
-  const handleMintV2 = async () => {
-    if (!metaplex || !candyMachine || !publicKey || !candyMachine.candyGuard) {
-      if (!candyMachine?.candyGuard)
-        throw new Error(
-          "This app only works with Candy Guards. Please setup your Guards through Sugar."
-        )
-
-      throw new Error(
-        "Couldn't find the Candy Machine or the connection is not defined."
-      )
-    }
-
+  const handleMint = async () => {
+    setIsLoading(true)
     try {
-      setIsLoading(true)
+      if (!candyGuard || !candyMachine) {
+        setFormMessage("Error with Candy Machine")
+        return
+      }
 
-      const { remainingAccounts, additionalIxs } =
-        getRemainingAccountsForCandyGuard(candyMachine, publicKey)
+      // mint
+      const nftSigner = generateSigner(umi)
 
-      const mint = Keypair.generate()
-      const { instructions } = await mintV2Instruction(
-        candyMachine.candyGuard?.address,
-        candyMachine.address,
-        publicKey,
-        publicKey,
-        mint,
-        connection,
-        metaplex,
-        remainingAccounts
+      // guards
+      const tokenPayment: Option<TokenPayment> = candyGuard.guards.tokenPayment
+      const tokenPaymentArgs = unwrapOption(tokenPayment)
+
+      if (!tokenPaymentArgs) {
+        setFormMessage("Error with token payment")
+        return
+      }
+
+      const tokenPaymentMintArgs: TokenPaymentMintArgs = {
+        mint: tokenPaymentArgs.mint,
+        destinationAta: tokenPaymentArgs.destinationAta,
+      }
+
+      const lut = await fetchAddressLookupTable(
+        umi,
+        publicKey(process.env.NEXT_PUBLIC_LUT_ACCOUNT || "")
       )
 
-      const tx = new Transaction()
-
-      if (additionalIxs?.length) {
-        tx.add(...additionalIxs)
+      if (!lut) {
+        setFormMessage("Error with LUT")
+        return
       }
 
-      tx.add(...instructions)
+      const tx = transactionBuilder()
+        .add(setComputeUnitLimit(umi, { units: 800_000 }))
+        .add(
+          mintV2(umi, {
+            candyMachine: candyMachine.publicKey,
+            collectionMint: candyMachine.collectionMint,
+            collectionUpdateAuthority: candyMachine.authority,
+            nftMint: nftSigner,
+            candyGuard: candyGuard.publicKey,
+            mintArgs: {
+              tokenPayment: some(tokenPaymentMintArgs),
+            },
+          })
+        )
+        .setAddressLookupTables([
+          {
+            publicKey: lut.publicKey,
+            addresses: lut.addresses,
+          },
+        ])
 
-      tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
-
-      const txid = await wallet.sendTransaction(tx, connection, {
-        signers: [mint],
+      // SEND
+      const { signature } = await tx.sendAndConfirm(umi, {
+        confirm: { commitment: "finalized" },
+        send: {
+          skipPreflight: true,
+        },
       })
 
-      const latest = await connection.getLatestBlockhash()
-      await connection.confirmTransaction({
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: latest.lastValidBlockHeight,
-        signature: txid,
-      })
+      const digitalAsset = await fetchDigitalAsset(umi, nftSigner.publicKey)
 
-      setFormMessage("Minted successfully!")
-    } catch (e: any) {
-      const msg = fromTxError(e)
-
-      if (msg) {
-        setFormMessage(msg.message)
-      } else {
-        const msg = e.message || e.toString()
-        setFormMessage(msg)
+      if (digitalAsset) {
+        setFormMessage("MINTED!")
+        return
       }
-    } finally {
-      setIsLoading(false)
 
-      setTimeout(() => {
-        setFormMessage(null)
-      }, 5000)
+      setFormMessage("Mint failed!")
+    } catch (err: any) {
+      setFormMessage(err)
     }
+    setIsLoading(false)
   }
 
-  const cost = candyMachine
-    ? candyMachine.candyGuard?.guards.tokenPayment
-      ? Number(
-          candyMachine.candyGuard?.guards.tokenPayment?.amount.basisPoints
-        ) /
-          1 + // Divide by 10 instead of 1e1
-        " GEMS"
-      : "GEMS Mint"
-    : "..."
+  //load cm upon load
+  useEffect(() => {
+    getCandyMachine()
+  }, [])
+
+  // update cost when candyguard is present or changes
+  useEffect(() => {
+    let cost =
+      candyGuard?.guards.tokenPayment.__option === "Some"
+        ? Number(unwrapOption(candyGuard.guards.tokenPayment)?.amount) / 100 +
+          " GEMS"
+        : "GEMS MINT"
+    setCost(cost)
+  }, [candyGuard])
+
+  // Get CM Details
+  const getCandyMachine = async () => {
+    const candyMachineAddress = process.env.NEXT_PUBLIC_CANDY_MACHINE_ID
+      ? process.env.NEXT_PUBLIC_CANDY_MACHINE_ID
+      : null
+
+    if (!candyMachineAddress || candyMachineAddress === "") {
+      console.log("No candy machine!")
+      // disable mint button
+      return
+    }
+
+    const candyMachine: CandyMachine = await fetchCandyMachine(
+      umi,
+      publicKey(candyMachineAddress)
+    )
+    console.log(candyMachine)
+    setCandyMachine(candyMachine)
+
+    const candyGuard = await safeFetchCandyGuard(
+      umi,
+      candyMachine.mintAuthority
+    )
+    console.log(candyGuard)
+    setCandyGuard(candyGuard ? candyGuard : undefined)
+  }
 
   return (
     <>
@@ -183,9 +211,9 @@ export default function Home() {
               width: "320px",
             }}
           >
-            <h1>{collection?.name}</h1>
+            <h1>Doodlcorns</h1>
             <p style={{ color: "#807a82", marginBottom: "32px" }}>
-              {collection?.json?.description}
+              5,000 totally rad Doodlcorns chillin&apos; on Solana.
             </p>
 
             <div
@@ -213,7 +241,10 @@ export default function Home() {
                   marginBottom: "16px",
                 }}
               ></div>
-              <button disabled={!publicKey || isLoading} onClick={handleMintV2}>
+              <button
+                disabled={!wallet.publicKey || isLoading}
+                onClick={handleMint}
+              >
                 {isLoading ? "Minting your NFT..." : "Mint"}
               </button>
               <WalletMultiButton
